@@ -23,7 +23,7 @@ Hello! I'm a software engineer with a dynamics background who has a passion for 
 
 As a consultant for ULC Technologies, I developed mathematical models and control designs for a robot that wraps fiber optic cable around power lines. Later, as an engineer at Dextrous Robotics, I wrote task space control code for a robot that unloads semi-trucks. My PhD dissertation describes a contact model I invented, which you can try out in the Drake physics engine.
 
-In my free time, I enjoy discovering new places and cuisines. I especially like hiking, camping, and generally spending time outside. Thank you for visiting my personal website, and I look forward to connecting with you.
+In my free time, I enjoy discovering new places and cuisines. I especially like hiking, camping, and generally spending time outside. Thank you for visiting my personal website. I look forward to connecting with you.
 
 
 <!-- Changed content here. Tell the world about yourself. Link to your favorite [subreddit](http://reddit.com). You can put a picture in, too. The code is already in, just name your picture `prof_pic.jpg` and put it in the `img/` folder.

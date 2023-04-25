@@ -1,11 +1,11 @@
 ---
 layout: page
-permalink: /projects/
+permalink: /projects_old/
 title: projects
 description: Projects I've worked on.
-nav: true
-nav_order: 2
-dropdown: true
+nav: false
+nav_order: 3
+dropdown: false
 horizontal: false
 display_categories: [work]
 children:

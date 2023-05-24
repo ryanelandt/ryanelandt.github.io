@@ -15,6 +15,8 @@ children:
     permalink: /projects/cable_fiber_robot
   - title: Gravity Wave Lensing
     permalink: /projects/gravity_wave_lensing
+  # - title: C++ Project
+  #   permalink: /projects/cpp_path_planning
 ---
 
 

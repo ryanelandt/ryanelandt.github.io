@@ -68,7 +68,7 @@ class CanvasHelper {
     const height = width / this.aspect_ratio();
     canvas_holder.style.height = height + "px";
     
-    renderer.setSize(width, height);    
+    renderer.setSize(width, height);
     this.print_canvas_holder_size(canvas_holder);
   }
   
@@ -435,6 +435,7 @@ function manageStartEndCity(id) {
 function onWindowResize() {
   console.log("CW" + canvas_holder.clientWidth + " CH" + canvas_holder.clientHeight);
   canvas_helper.set_canvas_holder_size(canvas_holder, renderer);
+  render();
 }
 
 // function animate() {

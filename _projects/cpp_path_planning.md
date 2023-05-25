@@ -7,30 +7,12 @@ importance: 2
 category: work
 ---
 
-### Interactive planner
-
-<!-- <style>
-.highlight-left {margin-left: 0}
-canvas { position: relative; top: 0;}
-</style> -->
-
+### Click the map below to plan a trip
 
 <div id="canvas-holder"></div>
 
-
-<script type="module" src="../../assets/my_js/flight_planner_app.js"></script>
-<script src="../../assets/my_js/flight_planner.js"></script> 
-
-<!-- <style>
-.caption {
-  font-size: 20px; /* Adjust the value to increase or decrease the font size */
-}
-</style> -->
-
-
-<!--
-http://127.0.0.1:4000/projects/cpp_path_planning/
--->
+<script type="module" src="../../assets/my_js/flight_planner_app.js">
+</script>
 
 <div class="caption" style="font-size: 16px;">
 <strong>Click</strong> on cities to find the fastest route.
@@ -41,9 +23,10 @@ http://127.0.0.1:4000/projects/cpp_path_planning/
 I created a path planner for a small electric plane to address the lack of publicly available C++ projects on my GitHub.
 The problem statement for this project can be found
 [here](https://github.com/ryanelandt/path_planning_with_charging/blob/main/problem_statement.md).
-My solution is available on GitHub [here](https://github.com/ryanelandt/path_planning_with_charging).
-I compiled this C++ code into WebAssembly and used it to create the interactive path planner above.
-I created the graphical elements of this application with the [three.js](https://threejs.org/) library.
+My solution can be found [here](https://github.com/ryanelandt/path_planning_with_charging).
+To visualize the program's output, I first used [Emscripten](https://emscripten.org/) to compile my C++ code into WebAssembly.
+I then created an interactive map with the [three.js](https://threejs.org/) JavaScript library to run this WebAssembly module.
+
 
 #### **Problem overview**
 

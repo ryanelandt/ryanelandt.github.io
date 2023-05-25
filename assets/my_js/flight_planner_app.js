@@ -1,17 +1,28 @@
-// import * as THREE from 'three';
-// import * as THREE from './three.module.js';
 import * as THREE from './three.module.min.js';
 
-let canvas_holder, canvas_sizer;
+import Module from './flight_planner.js';
+
+var ModObj;
+
+Module().then((instance) => {
+  ModObj = instance;
+  console.log("Promise resolved!");
+  init();
+  // render();
+  // animate();
+});
+
+
+let canvas_holder, canvas_helper;
 let camera, scene, raycaster, renderer;
 
 let helper_cpp;
 let path_rad = 1.5;
 let v_cylinders = [];
 
-let rgb_puck_inner = 0xffddbb;
-let rgb_puck_outer = 0x398464;
-let rgb_path = 0x88722E;
+let rgb_puck_inner = 0xffddbb;  // Yellow 
+let rgb_puck_outer = 0x398464;  // Green
+let rgb_path       = 0x88722E;  // Brown
 
 // Geometry Control Panel
 let puck_size = 3.5;
@@ -19,8 +30,7 @@ let puck_height = 0.4;
 let puck_dist_lower = 500;
 var puck_dist_prop = 1.0001;
 
-const pointer = new THREE.Vector2();
-const frustumSize = 215;
+const mouse_xy = new THREE.Vector2();
 
 // custom global variables
 var vStartEndCity = [];
@@ -30,155 +40,142 @@ var v_city_puck_outer = [];
 var dictObIdToCityId = {};
 
 
+//////////////////////////////////////////
 
 
-////////////////////////////////
-
-
-class CanvasSizer {
-  constructor(canvas_holder, renderer) {
+// Class sizes and resizes the canvas and camera
+class CanvasHelper {
+  constructor() {
     this.aspect_ratio_ = 1.7;
     this.width_min_ = 400;
-    this.canvas_holder_ = canvas_holder;
-    this.renderer_ = renderer;
-    this.set_size();
-    this.print_size();
+    this.frustumSize_ = 215;
   }
 
-  calc_camera() {
+  // Creates the camera
+  create_camera() {
+    const fSize = this.frustumSize();
     return new THREE.OrthographicCamera(
-      frustumSize * this.aspect_ratio_ / - 2,
-      frustumSize * this.aspect_ratio_ / 2,
-      frustumSize / 2,
-      frustumSize / - 2, 1, 1000
+      fSize * this.aspect_ratio_ / - 2,
+      fSize * this.aspect_ratio_ / 2,
+      fSize / 2,
+      fSize / - 2, 1, 1000
     );
   }
 
-  set_size() {
-    const height = this.width() / this.aspect_ratio();
-    this.canvas_holder().style.height = height + "px";
-    this.renderer_.setSize(this.width(), height);    
-    this.print_size();
+  // Sets the size of the canvas and renderer
+  set_canvas_holder_size(canvas_holder, renderer) {
+    const width = canvas_holder.clientWidth;
+    const height = width / this.aspect_ratio();
+    canvas_holder.style.height = height + "px";
+    
+    renderer.setSize(width, height);    
+    this.print_canvas_holder_size(canvas_holder);
   }
   
-  print_size() { 
-    const width = this.width();
-    const height = this.height();
+  // Prints the size of the canvas
+  print_canvas_holder_size(ch) { 
+    const width = ch.clientWidth;
+    const height = ch.clientHeight;
     console.log("width: " + width + " height: " + height);
   }
   
   aspect_ratio() { return this.aspect_ratio_; }
   width_min() { return this.width_min_; }
-  canvas_holder() { return this.canvas_holder_; }
-  
-  width() { return this.canvas_holder().clientWidth; }
-  height() { return this.canvas_holder().clientHeight; }
+  frustumSize() { return this.frustumSize_; }
 }
 
 
-
+// Class stores the id and position of a city
 class City {
-  // Position is a THREE.Vector3
   constructor(id, position) {
     this.id = id;
-    this.position = position;
+    this.position = position;  // Position is a THREE.Vector3
   }
 
   getId() { return this.id; }
   getPosition() { return this.position; }
 }
 
-class HelperCppPointer {
-  constructor(d_type, tuple_size) {
-    // Assert d_type is int or double
-    if (d_type != 'int' && d_type != 'double') {
-      throw new Error('d_type must be int or double');
+
+// Class Allocates a C++ array and frees it when it is destroyed
+class CppArrayPointerHelper {
+  constructor(n) {
+    // Assert the datatype of n_doubles is int
+    if (typeof n != 'number') {
+      throw new Error('n must be an integer');
     }
 
-    // Assert tuple_size has exactly 2 integers
-    if (tuple_size.length != 2) {
-      throw new Error('tuple_size must have exactly 2 integers');
-    }
-
-    var n_max = tuple_size[0] * tuple_size[1];  // Get the maximum number of elements
+    // We need to store n doubles, each double is 8 bytes, so we need to 
+    // allocate 8 * n bytes for the data pointer
+    this.dataPtr = ModObj._malloc(8 * n);
     
-    // 4 bytes for int, 8 bytes for double
-    var n_bytes_per_dtype = d_type == 'int' ? 4 : 8;
-    
-    // Allocate memory for the data pointer
-    this.dataPtr = Module._malloc(n_bytes_per_dtype * n_max);
-    
-    this.n_max = n_max;
-    this.lengthPtr = Module._malloc(4);  // Allocate 4 bytes for an integer pointer
+    this.n = n;
+    this.lengthPtr = ModObj._malloc(4);  // Allocate 4 bytes for an integer pointer
   }
   
-  getDataPtr() { return this.dataPtr; }  // Returns the data pointer
-  getLengthPtr() { return this.lengthPtr; }  // Returns the length pointer
-  getData() { return this.data; }  // Returns the data array
-  getLength() { return Module.getValue(this.lengthPtr, 'i32'); }  // Returns the length
+  getLength() { return ModObj.getValue(this.lengthPtr, 'i32'); }  // Returns the length
 
   free() {
-    Module._free(this.dataPtr);
-    Module._free(this.lengthPtr);
+    ModObj._free(this.dataPtr);
+    ModObj._free(this.lengthPtr);
   }
-}
 
-
-function loadCityData(helper) {
-  var lengthPtr = helper.getLengthPtr();
-  var dataPtr = helper.getDataPtr();
-  
-  var fun_name = 'voidAirportXyz';
-  puck_dist_lower = 500;
-  
-  Module.ccall( 
-    fun_name,
-    'void',
-    ['number', 'number'], 
-    [dataPtr, lengthPtr],
-  );
+  // Loads the Cartesian positions of each city in the planner.
+  loadCityData() {
+    var fun_name = 'voidAirportXyz';
+    puck_dist_lower = 500;
     
-  var linear_city_xyz = new Float64Array(Module.HEAPF64.buffer, helper.dataPtr, helper.n_max);
+    // Call the function in the wasm module
+    ModObj.ccall( 
+      fun_name,
+      'void',
+      ['number', 'number'], 
+      [this.dataPtr, this.lengthPtr],
+    );
+      
+    // Interprets the Cpp array as a JavaScript array
+    var linear_city_xyz = new Float64Array(ModObj.HEAPF64.buffer, this.dataPtr, this.n);
+    
+    // Create JavaScript array from typed array
+    var resultArray = [];
+    for (var i = 0; i < this.getLength(); i += 3) {
+      resultArray.push([
+        linear_city_xyz[i]     * puck_dist_lower,
+        linear_city_xyz[i + 1] * puck_dist_lower,
+        linear_city_xyz[i + 2] * puck_dist_lower
+      ]);
+    }
   
-  // Create JavaScript array from typed array
-  var resultArray = [];
-  for (var i = 0; i < helper.getLength(); i += 3) {
-    resultArray.push([
-      linear_city_xyz[i]     * puck_dist_lower,
-      linear_city_xyz[i + 1] * puck_dist_lower,
-      linear_city_xyz[i + 2] * puck_dist_lower
-    ]);
+    return resultArray;
   }
 
-  return resultArray;
-}
+  // Calculates the sequence of cities that make up the minimum time path from id_src to id_dst.
+  loadPathReal(id_src, id_dst) {
 
-
-function loadPathReal(helper, id_src, id_dst) {
-  var lengthPtr = helper.getLengthPtr();
-  var dataPtr = helper.getDataPtr();
-
-  Module.ccall(
-    'voidPathOutReal',
-    'void',
-    ['number', 'number', 'number', 'number'],
-    [dataPtr, lengthPtr, id_src, id_dst],
-  );
-
-  var linear_path = new Float64Array(Module.HEAPF64.buffer, helper.dataPtr, helper.n_max);
-
-  // Create JavaScript array from typed array
-  var resultArray = [];
-  for (var i = 0; i < helper.getLength(); ++i) {
-    var ind_double = linear_path[i];
-
-    // Converts to integer -- Asserts is exactly an integer
-    var ind = Math.round(ind_double);
-    if (ind != ind_double) { throw new Error('ind is not an integer'); }
-    resultArray.push(ind);
+    // Call the path planning function in the wasm module
+    ModObj.ccall(
+      'voidPathOutReal',
+      'void',
+      ['number', 'number', 'number', 'number'],
+      [this.dataPtr, this.lengthPtr, id_src, id_dst],
+    );
+  
+    // Interprets the Cpp array as a JavaScript array
+    var linear_path = new Float64Array(ModObj.HEAPF64.buffer, this.dataPtr, this.n);
+  
+    // Create JavaScript array from typed array
+    var resultArray = [];
+    for (var i = 0; i < this.getLength(); ++i) {
+      var ind_double = linear_path[i];
+  
+      // Converts to integer -- Asserts is exactly an integer
+      var ind = Math.round(ind_double);
+      if (ind != ind_double) { throw new Error('ind is not an integer'); }
+      resultArray.push(ind);
+    }
+  
+    return resultArray;
   }
-
-  return resultArray;
 }
 
 function createCylGeoForHeight(r, h) { return new THREE.CylinderGeometry(r, r, h, 16, 1, false); }
@@ -237,120 +234,118 @@ function adjustLower(obj_in) {
   obj_in.position.set(xyz.x, xyz.y, xyz.z);
 }
 
+
+// Initializes the geometry of the scene
 function initGeometry() {
-  console.log("Initializing Emscripten module");  // Log to console
+  const n_doubles_allocate = 303 * 3;
+  helper_cpp = new CppArrayPointerHelper(n_doubles_allocate);
+  var resultArray = helper_cpp.loadCityData();
 
-  // Initialize Emscripten module
-  Module.onRuntimeInitialized = function () {
-    helper_cpp = new HelperCppPointer('double', [303, 4]);
-    var resultArray = loadCityData(helper_cpp);
+  // Add cities to vCity
+  for (let i = 0; i < resultArray.length; i++) {
+    const city = new City(i, new THREE.Vector3(resultArray[i][0], resultArray[i][1], resultArray[i][2]));
+    vCity.push(city);
+  }
 
-    console.log(resultArray);
-
-    // Add cities to vCity
-    for (let i = 0; i < resultArray.length; i++) {
-      const city = new City(i, new THREE.Vector3(resultArray[i][0], resultArray[i][1], resultArray[i][2]));
-      vCity.push(city);
-    }
-
-    // Log number of cities
-    console.log("Number of cities: " + vCity.length);
-
-    const puck_inner = createCylGeoForHeight(puck_size, puck_height);
+  const puck_inner = createCylGeoForHeight(puck_size, puck_height);
+  
+  var outlineGeometry = createCylGeoForHeight(puck_size * 2.0, puck_height * 0.5);
+  var outlineMaterial = new THREE.MeshBasicMaterial( { color: rgb_puck_outer, side: THREE.BackSide } );
+  
+  // Iterate over vCity
+  for (let i = 0; i < vCity.length; i++) {
+    const object = new THREE.Mesh( puck_inner,
+      new THREE.MeshBasicMaterial( {
+        color: rgb_puck_inner,
+      } )
+    );
     
-    var outlineGeometry = createCylGeoForHeight(puck_size * 2.0, puck_height * 0.5);
-    var outlineMaterial = new THREE.MeshBasicMaterial( { color: rgb_puck_outer, side: THREE.BackSide } );
+    const position_i = vCity[i].getPosition();
+
+    object.material.depthTest = true;
+    adjustCylinder(object, [0, 0, 0], position_i, true);
     
-    // Iterate over vCity
-    for (let i = 0; i < vCity.length; i++) {
-      const object = new THREE.Mesh( puck_inner,
-        new THREE.MeshBasicMaterial( {
-          color: rgb_puck_inner,
-        } )
-      );
-      
-      const position_i = vCity[i].getPosition();
+    var outlineMesh = new THREE.Mesh( outlineGeometry, outlineMaterial );
+    adjustCylinder(outlineMesh, [0, 0, 0], position_i, true);
+    
+    object.position.set( vCity[i].getPosition().x, vCity[i].getPosition().y, vCity[i].getPosition().z );
+    outlineMesh.position.set( vCity[i].getPosition().x, vCity[i].getPosition().y, vCity[i].getPosition().z );
 
-      object.material.depthTest = true;
-      adjustCylinder(object, [0, 0, 0], position_i, true);
-      
-      var outlineMesh = new THREE.Mesh( outlineGeometry, outlineMaterial );
-      adjustCylinder(outlineMesh, [0, 0, 0], position_i, true);
-      
-      object.position.set( vCity[i].getPosition().x, vCity[i].getPosition().y, vCity[i].getPosition().z );
-      outlineMesh.position.set( vCity[i].getPosition().x, vCity[i].getPosition().y, vCity[i].getPosition().z );
-
-      var group = new THREE.Group();
-      group.add( object );
-      group.add( outlineMesh );
-      scene.add( group );
-      
-      v_city_puck_inner.push(object);
-      v_city_puck_outer.push(outlineMesh);
-      dictObIdToCityId[object.id] = i;
-      dictObIdToCityId[outlineMesh.id] = i;
-    }
-  };
+    var group = new THREE.Group();
+    group.add( object );
+    group.add( outlineMesh );
+    scene.add( group );
+    
+    v_city_puck_inner.push(object);
+    v_city_puck_outer.push(outlineMesh);
+    dictObIdToCityId[object.id] = i;
+    dictObIdToCityId[outlineMesh.id] = i;
+  }
 }
 
 
-init();
-animate();
-
+// Initializes the scene
 function init() {
+  // Gets the canvas-holder html element
+  canvas_holder = document.getElementById("canvas-holder");
+  
+  canvas_helper = new CanvasHelper();
+  camera = canvas_helper.create_camera();
+  
+  // Define the raycaster
+  raycaster = new THREE.Raycaster();
+ 
+  // Define the renderer
+  renderer = new THREE.WebGLRenderer();
+  renderer.setPixelRatio( window.devicePixelRatio );
+  canvas_helper.set_canvas_holder_size(canvas_holder, renderer);
+  canvas_holder.appendChild( renderer.domElement );
+  
   // Define the scene
   scene = new THREE.Scene();
-  // scene.background = new THREE.Color( 0xf0f0f0 );
   scene.background = new THREE.Color( 0xc0c0c0 );
-
+  
   // Add a light
   const light = new THREE.DirectionalLight( 0xffffff, 1 );
   light.position.set( -150, -1050, 800).normalize();
   scene.add( light );
 
-  // Define the renderer
-  renderer = new THREE.WebGLRenderer();
-  renderer.setPixelRatio( window.devicePixelRatio );
-
-  // Gets the canvas-holder html element
-  canvas_holder = document.getElementById("canvas-holder");
-  canvas_sizer = new CanvasSizer(canvas_holder, renderer);
-
-  // Define the raycaster
-  raycaster = new THREE.Raycaster();
+  // Adds the geometry
   initGeometry();
-  
-  camera = canvas_sizer.calc_camera();
-  canvas_holder.appendChild( renderer.domElement );
 
   // Add event listeners
 	document.addEventListener( 'mousedown', onDocumentMouseDown, false );
   window.addEventListener( 'resize', onWindowResize );
+
+  render();
 }
 
-function findIdCityClicked(raycaster) {
-  // Find intersections with inner pucks
-  const intersects = raycaster.intersectObjects( v_city_puck_inner, true );
-  if (intersects.length != 0) {
-    return dictObIdToCityId[intersects[0].object.id];
-  }
 
-  // Find intersections with outer pucks
-  const intersects_outer = raycaster.intersectObjects( v_city_puck_outer, true );
-  if (intersects_outer.length != 0) { 
-    const obj_outer = intersects_outer[0];
-    return dictObIdToCityId[obj_outer.object.id];
-  }
-  
-  return null;
-}
-
+// Event listener for mouse clicks
 function onDocumentMouseDown( event ) {
+  // Finds the id of the city clicked
+  function findIdCityClicked(raycaster) {
+    // Find intersections with inner pucks
+    const intersects = raycaster.intersectObjects( v_city_puck_inner, true );
+    if (intersects.length != 0) {
+      return dictObIdToCityId[intersects[0].object.id];
+    }
+
+    // Find intersections with outer pucks
+    const intersects_outer = raycaster.intersectObjects( v_city_puck_outer, true );
+    if (intersects_outer.length != 0) { 
+      const obj_outer = intersects_outer[0];
+      return dictObIdToCityId[obj_outer.object.id];
+    }
+    
+    return null;
+  }
+
   // update the mouse variable
   const rect = renderer.domElement.getBoundingClientRect();
-  pointer.x = ( ( event.clientX - rect.left ) / ( rect.right - rect.left ) ) * 2 - 1;
-  pointer.y = - ( ( event.clientY - rect.top ) / ( rect.bottom - rect.top) ) * 2 + 1;
-  raycaster.setFromCamera( pointer, camera );
+  mouse_xy.x = ( ( event.clientX - rect.left ) / ( rect.right - rect.left ) ) * 2 - 1;
+  mouse_xy.y = - ( ( event.clientY - rect.top ) / ( rect.bottom - rect.top) ) * 2 + 1;
+  raycaster.setFromCamera( mouse_xy, camera );
   const id_city_clicked = findIdCityClicked(raycaster);
   if (id_city_clicked == null) { return; }
 
@@ -373,12 +368,15 @@ function onDocumentMouseDown( event ) {
   manageStartEndCity(id_raise);
   
   drawPath();
+
+  render();
 }
 
+// Draws the path between the two clicked cities
 function drawPath() {
   if (vStartEndCity.length != 2) { return; }
 
-  var v_id_path = loadPathReal(helper_cpp, 
+  var v_id_path = helper_cpp.loadPathReal( 
     dictObIdToCityId[vStartEndCity[0]],
     dictObIdToCityId[vStartEndCity[1]],
   );
@@ -391,7 +389,11 @@ function drawPath() {
   for (let i = 0; i < v_id_path.length; i++) {
     var id = v_id_path[i];
     var pos = vCity[id].getPosition();
-    points.push(pos);
+
+    // If pos is different from pos_prev, add it to points
+    if (i == 0 || !pos.equals(points[points.length - 1])) {
+      points.push(pos);
+    }
   }
 
   const n_cyl_required = points.length - 1;
@@ -430,16 +432,15 @@ function manageStartEndCity(id) {
   }
 }
 
-
 function onWindowResize() {
   console.log("CW" + canvas_holder.clientWidth + " CH" + canvas_holder.clientHeight);
-  canvas_sizer.set_size();
+  canvas_helper.set_canvas_holder_size(canvas_holder, renderer);
 }
 
-function animate() {
-  requestAnimationFrame(animate);
-  render();
-}
+// function animate() {
+//   requestAnimationFrame(animate);
+//   render();
+// }
 
 function render() {
   camera.position.set(-168, -1000, 800)
@@ -451,4 +452,6 @@ function render() {
   camera.updateMatrixWorld();
 
   renderer.render( scene, camera );
+
+  console.log("render");
 }

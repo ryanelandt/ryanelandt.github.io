@@ -20,7 +20,7 @@ category: work
 
 #### **Context**
 
-This [GitHub repository](https://github.com/ryanelandt/path_planning_with_charging) contains a path planner I developed for the small electric plane described in [this problem statement](https://github.com/ryanelandt/path_planning_with_charging/blob/main/problem_statement.md).
+This [GitHub repository](https://github.com/ryanelandt/path_planning_with_charging) contains a path planner I developed for the small electric plane described in [this problem statement](https://github.com/ryanelandt/path_planning_with_charging/blob/main/problem_materials/problem_statement.md).
 I undertook this project to publicly showcase my C++ abilities, as my other C++ projects are private.
 To visualize my planner's output, I first used [Emscripten](https://emscripten.org/) to compile my C++ code into WebAssembly.
 I then used the [three.js](https://threejs.org/) JavaScript library to create an interactive map to run this WebAssembly module.
